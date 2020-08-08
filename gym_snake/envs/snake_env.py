@@ -7,7 +7,7 @@ class SnakeEnv(gym.Env):
     Description:
         A snake manuevers through a world with the goal to find and eat apples, in order to get bigger.
         While doing so it avoids any obstacles in its path including itself, to prevent a horrible death.
-    
+
     Source:
         This environment corresponds to the popular video game concept.
 
@@ -79,6 +79,14 @@ class SnakeEnv(gym.Env):
         assert type(add_len) == int and add_len >= 0, "Invalid parameter: add_len must be an integer and greater-or-equal than zero"
         assert type(termination) == int and termination > 0, "Invalid parameter: termination must be an integer and greater than zero"
 
+        self._size = size
+        self._reward = reward
+        self._obs = obs
+        self._spawn = spawn
+        self._add_len = add_len
+        self._termination = termination
+        np.random.seed = seed
+
         #setup variables
         self._matrix = None
         self._snake = None
@@ -88,6 +96,22 @@ class SnakeEnv(gym.Env):
         self._viewer = None
         self._snake_hunger = 0
 
+        self.action_space = gym.spaces.Discrete(4)
+        if obs == "image":
+            self.observation_space = gym.spaces.Box(np.zeros((self._size, self._size)), np.full((self._size, self._size), 2))
+        elif obs == "ray":
+            self.observation_space = gym.spaces.Box(np.zeros((8, 3)), np.ones((8, 3)))
+        elif obs == "simple":
+            self.observation_space = gym.spaces.Box(np.full((10), -1), np.full((10), 2))
+
+    def set_params(self, size = 25, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 25, seed = None):
+        assert type(size) == int and size > 0, "Invalid parameter: size must be an integer and greater than zero"
+        assert reward in ["soft", "hard"], "Invalid parameter: reward must be either \"soft\" or \"hard\""
+        assert obs in ["image", "ray", "simple"], "Invalid parameter: obs must be either \"image\", \"ray\" or \"simple\""
+        assert spawn in ["center", "random"], "Invalid parameter: spawn must be either \"center\" or \"random\""
+        assert type(add_len) == int and add_len >= 0, "Invalid parameter: add_len must be an integer and greater-or-equal than zero"
+        assert type(termination) == int and termination > 0, "Invalid parameter: termination must be an integer and greater than zero"
+
         self._size = size
         self._reward = reward
         self._obs = obs
@@ -96,7 +120,6 @@ class SnakeEnv(gym.Env):
         self._termination = termination
         np.random.seed = seed
 
-        self.action_space = gym.spaces.Discrete(4)
         if obs == "image":
             self.observation_space = gym.spaces.Box(np.zeros((self._size, self._size)), np.full((self._size, self._size), 2))
         elif obs == "ray":
@@ -182,21 +205,22 @@ class SnakeEnv(gym.Env):
             self._matrix[self._snake[-1][0], self._snake[-1][1]] = 0
             self._snake.pop()
 
-        if not self._done:
-            #insert new head into snake body
-            self._snake.insert(0, tuple(new_head_pos))
+
+        self._snake.insert(0, tuple(new_head_pos))
 
         #snake has not eaten something for too long
         if self._snake_hunger > self._termination:
             self._done = True
             reward = -1
+
+        self._snake_hunger += 1
         
         if self._obs == "image":
             return self._matrix, reward, self._done, {}
         elif self._obs == "ray":
             return self._getRays(), reward, self._done, {}
         elif self._obs == "simple":
-            return self._getSimple(), reward. self._done, {}
+            return self._getSimple(), reward, self._done, {}
 
     def render(self, mode = "human"):
         screen_size = 800 - self._size*1
@@ -207,8 +231,8 @@ class SnakeEnv(gym.Env):
 
             #create squares to represent the game
             length_square = (screen_size+self._size*1) / self._size - 1
-            self._squares = [[rendering.FilledPolygon([(i*length_square, j*length_square), ((i+1)*length_square, j*length_square), 
-                                        ((i+1)*length_square, (j+1)*length_square), (i*length_square, (j+1)*length_square)])
+            self._squares = [[rendering.FilledPolygon([(i*length_square, j*length_square), ((i+1)*length_square-3, j*length_square), 
+                                        ((i+1)*length_square-3, (j+1)*length_square-3), (i*length_square, (j+1)*length_square-3)])
                                         for i in range(0, self._size)] for j in range(0, self._size)]
             for i in range(0, self._size):
                 for j in range(0, self._size):
@@ -224,7 +248,7 @@ class SnakeEnv(gym.Env):
                 if temp[i, j] == 0:
                     self._squares[i][j].set_color(0, 0, 0)
                 elif temp[i, j] == 1:
-                    self._squares[i][j].set_color(255, 255, 255)
+                    self._squares[i][j].set_color(0, 255, 255)
                 elif temp[i, j] == 2:
                     self._squares[i][j].set_color(255, 0, 0)        
 
