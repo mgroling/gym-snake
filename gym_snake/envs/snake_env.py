@@ -12,13 +12,13 @@ class SnakeEnv(gym.Env):
         This environment corresponds to the popular video game concept.
 
     Observation:
-        There are 3 modes for observation: "image", "ray", "simple":
+        There are three modes for observation: "image", "ray", "simple":
 
         Image:
             Type: Box(size, size)
             This returns a 2d numpy array with pixel format.
             0 is an empty pixel.
-            1 is a pixel with the snake on it.
+            1 is a pixel with a part of the snake on it.
             2 is a pixel with an apple on it.
 
         Ray:
@@ -26,16 +26,14 @@ class SnakeEnv(gym.Env):
             This returns raycasts, with center position being the head of the snake.
             First column are raycasts of the snake body, second column are raycasts of apples and third column is raycasts of walls.
             Rows corresponds to the direction, snake can see in 8 directions (cardinal points: N, NE, E, SE, S, SW, W, NW)
-            If the corresponding type of object is very close, the value for the raycast is close to 1 and if it is far away it is close to 0
+            If the corresponding type of object is very close, the value for the raycast is close to 1 and if it is far away it is close to zero.
 
         Simple:
             Type: Box(10)
-            This returns the value of the next block in all 8 directions (like in Ray).
-            0 is an empty pixel.
-            1 is a pixel with the snake on it.
-            2 is a pixel with an apple on it.
-            -1 is a pixel outside of the field.
-            The last 2 variables display the vector from the snake head to the apple.
+            This returns if the next block is an obstacle. This is done in all 8 directions (like in Ray).
+            0 is not an obstacle
+            1 is an obstacle
+            The last 2 variables display the vector from the snake head to the apple, scaled down between zero and one. One being close, zero being far.
 
     Actions:
         Type: Discrete(4)
@@ -51,7 +49,7 @@ class SnakeEnv(gym.Env):
         Soft:
             possible events                 reward
             snake eats apple                1
-            snake gets closer to apple      0.5
+            snake gets closer to apple      0.25
             snake runs into wall or outside -1
             anything else                   0
 
@@ -69,14 +67,17 @@ class SnakeEnv(gym.Env):
         Snake has not eaten an apple since 25 timesteps. This can be customised with termination.
 
     Further Customisation:
+        "size" changes the amount of blocks in height and width.
         "add_len" changes the additional length the snake gets by eating an apple.
+        "start_length" changes the starting length.
     """
-    def __init__(self, size = 25, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 25, seed = None):
+    def __init__(self, size = 15, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 50, start_length = 3, seed = None):
         assert type(size) == int and size > 0, "Invalid parameter: size must be an integer and greater than zero"
         assert reward in ["soft", "hard"], "Invalid parameter: reward must be either \"soft\" or \"hard\""
         assert obs in ["image", "ray", "simple"], "Invalid parameter: obs must be either \"image\", \"ray\" or \"simple\""
         assert spawn in ["center", "random"], "Invalid parameter: spawn must be either \"center\" or \"random\""
         assert type(add_len) == int and add_len >= 0, "Invalid parameter: add_len must be an integer and greater-or-equal than zero"
+        assert type(start_length) == int and start_length > 0, "Invalid parameter: start_length must be an integer and gerater than zero"
         assert type(termination) == int and termination > 0, "Invalid parameter: termination must be an integer and greater than zero"
 
         self._size = size
@@ -85,16 +86,18 @@ class SnakeEnv(gym.Env):
         self._spawn = spawn
         self._add_len = add_len
         self._termination = termination
+        self._start_len = start_length
         np.random.seed = seed
 
         #setup variables
         self._matrix = None
         self._snake = None
-        self._snake_len = None
         self._done = True
         self._mov_possibilites = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
+        self._snake_len = None
         self._viewer = None
         self._snake_hunger = 0
+        self._act_mapping = {0: np.array([-1, 0]), 1: np.array([0, 1]), 2: np.array([1, 0]), 3: np.array([0, -1])}
 
         self.action_space = gym.spaces.Discrete(4)
         if obs == "image":
@@ -102,14 +105,15 @@ class SnakeEnv(gym.Env):
         elif obs == "ray":
             self.observation_space = gym.spaces.Box(np.zeros((8, 3)), np.ones((8, 3)))
         elif obs == "simple":
-            self.observation_space = gym.spaces.Box(np.full((10), -1), np.full((10), 2))
+            self.observation_space = gym.spaces.Box(np.zeros(10), np.ones(10))
 
-    def set_params(self, size = 25, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 25, seed = None):
+    def set_params(self, size = 15, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 50, start_length = 3, seed = None):
         assert type(size) == int and size > 0, "Invalid parameter: size must be an integer and greater than zero"
         assert reward in ["soft", "hard"], "Invalid parameter: reward must be either \"soft\" or \"hard\""
         assert obs in ["image", "ray", "simple"], "Invalid parameter: obs must be either \"image\", \"ray\" or \"simple\""
         assert spawn in ["center", "random"], "Invalid parameter: spawn must be either \"center\" or \"random\""
         assert type(add_len) == int and add_len >= 0, "Invalid parameter: add_len must be an integer and greater-or-equal than zero"
+        assert type(start_length) == int and start_length > 0, "Invalid parameter: start_length must be an integer and gerater than zero"
         assert type(termination) == int and termination > 0, "Invalid parameter: termination must be an integer and greater than zero"
 
         self._size = size
@@ -118,6 +122,7 @@ class SnakeEnv(gym.Env):
         self._spawn = spawn
         self._add_len = add_len
         self._termination = termination
+        self._start_len = start_length
         np.random.seed = seed
 
         if obs == "image":
@@ -132,11 +137,22 @@ class SnakeEnv(gym.Env):
         self._matrix = np.zeros((self._size, self._size), dtype = np.int8)
         #spawn snake
         if self._spawn == "center":
-            self._snake = [(self._size//2, self._size//2)]
+            self._snake = []
+            for i in range(0, self._start_len):
+                self._snake.append((self._size//2, self._size//2-self._start_len//2+i))
         elif self._spawn == "random":
             self._snake = [((np.random.randint(self._size), np.random.randint(self._size)))]
-        self._matrix[self._snake[0][0], self._snake[0][1]] = 1
-        self._snake_len = 1
+            for i in range(1, self._start_len):
+                direction = self._act_mapping[np.random.randint(4)]
+                next_part = np.array([self._snake[-1][0]+direction[0], self._snake[-1][1]+direction[1]])
+                while (next_part < 0).any() or (next_part >= self._size).any():
+                    direction = self._act_mapping[np.random.randint(4)]
+                    next_part = np.array([self._snake[-1][0]+direction[0], self._snake[-1][1]+direction[1]])
+                self._snake.append((self._snake[-1][0]+direction[0], self._snake[-1][1]+direction[1]))
+        for i in range(0, len(self._snake)):
+            self._matrix[self._snake[i][0], self._snake[i][1]] = 1
+        self._snake_len = self._start_len
+        self._snake_hunger = 0
 
         self._done = False
         self._spawnApple()
@@ -159,18 +175,7 @@ class SnakeEnv(gym.Env):
                     "True' -- any further steps are undefined behavior."
                 )
 
-        #Up
-        if action == 0:
-            action = np.array([-1, 0])
-        #Right
-        elif action == 1:
-            action = np.array([0, 1])
-        #Down
-        elif action == 2:
-            action = np.array([1, 0])
-        #Left
-        elif action == 3:
-            action = np.array([0, -1])
+        action = self._act_mapping[action]
 
         reward = 0
         new_head_pos = self._snake[0] + action
@@ -179,7 +184,7 @@ class SnakeEnv(gym.Env):
             #give reward of 0.5 if snake got closer to the apple
             old_apple_dist = self.getDistance(self._snake[0], self._apple)
             new_apple_dist = self.getDistance(new_head_pos, self._apple)
-            reward = 0.5 if old_apple_dist > new_apple_dist else 0
+            reward = 0.25 if old_apple_dist > new_apple_dist else 0
 
         #moved outside
         if (new_head_pos < 0).any() or (new_head_pos >= self._size).any():
@@ -204,7 +209,6 @@ class SnakeEnv(gym.Env):
         if len(self._snake) >= self._snake_len:
             self._matrix[self._snake[-1][0], self._snake[-1][1]] = 0
             self._snake.pop()
-
 
         self._snake.insert(0, tuple(new_head_pos))
 
@@ -231,8 +235,8 @@ class SnakeEnv(gym.Env):
 
             #create squares to represent the game
             length_square = (screen_size+self._size*1) / self._size - 1
-            self._squares = [[rendering.FilledPolygon([(i*length_square, j*length_square), ((i+1)*length_square-3, j*length_square), 
-                                        ((i+1)*length_square-3, (j+1)*length_square-3), (i*length_square, (j+1)*length_square-3)])
+            self._squares = [[rendering.FilledPolygon([(i*length_square+1, j*length_square+1), ((i+1)*length_square-1, j*length_square+1), 
+                                        ((i+1)*length_square-1, (j+1)*length_square-1), (i*length_square+1, (j+1)*length_square-1)])
                                         for i in range(0, self._size)] for j in range(0, self._size)]
             for i in range(0, self._size):
                 for j in range(0, self._size):
@@ -295,16 +299,19 @@ class SnakeEnv(gym.Env):
         return rays
 
     def _getSimple(self):
-        dist_apple_x_y = np.array([self._apple[0]-self._snake[0][0], self._apple[1]-self._snake[0][1]])
+        dist_apple_x_y = np.array([1 - (self._apple[0]-self._snake[0][0])/(self._size-1), 1 - (self._apple[1]-self._snake[0][1])/(self._size-1)])
 
         head = self._snake[0][0], self._snake[0][1]
         next_view = np.zeros((8,1))
         index = 0
         for i, j in self._mov_possibilites:
             if head[0]+i >= 0 and head[1]+j >= 0 and head[0]+i < self._size and head[1]+j < self._size:
-                next_view[index] = self._matrix[head[0]+i, head[1]+j]
+                if self._matrix[head[0]+i, head[1]+j] == 0 or self._matrix[head[0]+i, head[1]+j] == 2:
+                    next_view[index] = 0
+                else:
+                    next_view[index] = 1
             else:
-                next_view[index] = -1
+                next_view[index] = 1
             index += 1
 
         return np.append(next_view, dist_apple_x_y)
