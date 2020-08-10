@@ -44,20 +44,12 @@ class SnakeEnv(gym.Env):
         3   Snake goes left
 
     Reward:
-        Reward can be either set to "soft" or "hard".
-
-        Soft:
-            possible events                 reward
-            snake eats apple                1
-            snake gets closer to apple      0.25
-            snake runs into wall or outside -1
-            anything else                   0
-
-        Hard:
-            possible events                 reward
-            snake eats apple                1
-            snake runs into wall or outside -1
-            anything else                   0
+        Reward can be set by giving an iterable object.
+        Event                                               Reward
+        Snake gets closer to apple, but does not eat it     reward[1], default = 0
+        Snake eats apple                                    reward[2], default = 1
+        Snake dies                                          reward[3], default = -1
+        Anything else                                       reward[0], default = 0
 
     Starting state:
         Starting state can be eihter set to "center" or "random".
@@ -71,9 +63,12 @@ class SnakeEnv(gym.Env):
         "add_len" changes the additional length the snake gets by eating an apple.
         "start_length" changes the starting length.
     """
-    def __init__(self, size = 15, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 50, start_length = 3, seed = None):
+    def __init__(self, size = 15, reward = (0, 0, 1, -1), obs = "image", spawn = "center", add_len = 1, termination = 50, start_length = 3, seed = None):
         assert type(size) == int and size > 0, "Invalid parameter: size must be an integer and greater than zero"
-        assert reward in ["soft", "hard"], "Invalid parameter: reward must be either \"soft\" or \"hard\""
+        try:
+            assert len(reward) >= 4, "Invalid parameter: reward must be iterable and contain four or more elements, (all numbers)"
+        except:
+            assert False, "Invalid parameter: reward must be iterable and contain four or more elements, (all numbers)"
         assert obs in ["image", "ray", "simple"], "Invalid parameter: obs must be either \"image\", \"ray\" or \"simple\""
         assert spawn in ["center", "random"], "Invalid parameter: spawn must be either \"center\" or \"random\""
         assert type(add_len) == int and add_len >= 0, "Invalid parameter: add_len must be an integer and greater-or-equal than zero"
@@ -107,9 +102,12 @@ class SnakeEnv(gym.Env):
         elif obs == "simple":
             self.observation_space = gym.spaces.Box(np.zeros(10), np.ones(10))
 
-    def set_params(self, size = 15, reward = "hard", obs = "image", spawn = "center", add_len = 1, termination = 50, start_length = 3, seed = None):
+    def set_params(self, size = 15, reward = (0, 0, 1, -1), obs = "image", spawn = "center", add_len = 1, termination = 50, start_length = 3, seed = None):
         assert type(size) == int and size > 0, "Invalid parameter: size must be an integer and greater than zero"
-        assert reward in ["soft", "hard"], "Invalid parameter: reward must be either \"soft\" or \"hard\""
+        try:
+            assert len(reward) >= 4, "Invalid parameter: reward must be iterable and contain four or more elements, (all numbers)"
+        except:
+            assert False, "Invalid parameter: reward must be iterable and contain four or more elements, (all numbers)"
         assert obs in ["image", "ray", "simple"], "Invalid parameter: obs must be either \"image\", \"ray\" or \"simple\""
         assert spawn in ["center", "random"], "Invalid parameter: spawn must be either \"center\" or \"random\""
         assert type(add_len) == int and add_len >= 0, "Invalid parameter: add_len must be an integer and greater-or-equal than zero"
@@ -177,29 +175,27 @@ class SnakeEnv(gym.Env):
 
         action = self._act_mapping[action]
 
-        reward = 0
+        reward = self._reward[0]
         new_head_pos = self._snake[0] + action
 
-        if self._reward == "soft":
-            #give reward of 0.5 if snake got closer to the apple
-            old_apple_dist = self.getDistance(self._snake[0], self._apple)
-            new_apple_dist = self.getDistance(new_head_pos, self._apple)
-            reward = 0.25 if old_apple_dist > new_apple_dist else 0
+        old_apple_dist = self.getDistance(self._snake[0], self._apple)
+        new_apple_dist = self.getDistance(new_head_pos, self._apple)
+        reward = self._reward[1] if old_apple_dist > new_apple_dist else self._reward[0]
 
         #moved outside
         if (new_head_pos < 0).any() or (new_head_pos >= self._size).any():
             self._done = True
-            reward = -1
+            reward = self._reward[3]
         #moved into apple
         elif self._matrix[new_head_pos[0], new_head_pos[1]] == 2:
             self._snake_len += self._add_len
             self._spawnApple()
-            reward = 1
+            reward = self._reward[2]
             self._snake_hunger = 0
         #moved into itself
         elif self._matrix[new_head_pos[0], new_head_pos[1]] == 1:
             self._done = True
-            reward = -1
+            reward = self._reward[3]
         
         if not self._done:
             #move head
@@ -215,7 +211,7 @@ class SnakeEnv(gym.Env):
         #snake has not eaten something for too long
         if self._snake_hunger > self._termination:
             self._done = True
-            reward = -1
+            reward = self._reward[3]
 
         self._snake_hunger += 1
         
