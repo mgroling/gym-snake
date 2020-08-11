@@ -24,9 +24,9 @@ class SnakeEnv(gym.Env):
         Ray:
             Type: Box(8, 3)
             This returns raycasts, with center position being the head of the snake.
-            First column are raycasts of the snake body, second column are raycasts of apples and third column is raycasts of walls.
+            First column are raycasts of the snake body, second column are raycasts of the apple and third column is raycasts of walls.
             Rows corresponds to the direction, snake can see in 8 directions (cardinal points: N, NE, E, SE, S, SW, W, NW)
-            If the corresponding type of object is very close, the value for the raycast is close to 1 and if it is far away it is close to zero.
+            If the corresponding type of object is very close, the value for the raycast is close to one and if it is far away it is close to zero.
 
         Simple:
             Type: Box(10)
