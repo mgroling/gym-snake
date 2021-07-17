@@ -27,7 +27,7 @@ def main():
 
     # model.save("test/DQN/deepq_snake_ray_5grow_100k_10death")
 
-    model = DQN.load("test/DQN/deepq_snake_ray_5grow_300k")
+    model = DQN.load("experiments/DQN/deepq_snake_ray_5grow_300k")
 
     obs = env.reset()
 
