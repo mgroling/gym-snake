@@ -1,0 +1,10 @@
+!.gitignore
+!*.py
+!*.md
+!*.zip
+*.pyc
+
+# Directories
+build/
+dist/
+gym_snake.egg-info/
