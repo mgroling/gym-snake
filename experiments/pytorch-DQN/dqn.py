@@ -63,6 +63,8 @@ class Net(nn.Module):
     def __init__(self, gamma=0.99) -> None:
         super(Net, self).__init__()
         self.l1 = nn.Linear(10, 4)
+        self.l1.weight.data.fill_(0)
+        self.l1.bias.data.fill_(0)
         # self.l2 = nn.Linear(48, 4)
         self.gamma = gamma
 
@@ -144,7 +146,7 @@ if __name__ == "__main__":
     env.set_params(
         reward=(0, 0, 1, -1),
         obs="simple",
-        size=15,
+        size=4,
         termination=150,
         spawn="random",
         add_len=1,
@@ -154,7 +156,7 @@ if __name__ == "__main__":
     model = Net()
     model.float()
 
-    model.train(env, 10000, batch_size=128)
+    model.train(env, 1000, batch_size=128)
 
     # save
     torch.save(model.state_dict(), "experiments/pytorch-DQN/model")

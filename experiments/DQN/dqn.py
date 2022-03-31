@@ -9,7 +9,7 @@ if __name__ == "__main__":
     env.set_params(
         reward=(0, 0, 1, -1),
         obs="ray",
-        size=15,
+        size=10,
         termination=100,
         spawn="random",
         add_len=1,
@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     if train:
         model = DQN("MlpPolicy", env, verbose=1)
-        model.learn(total_timesteps=1000000)
+        model.learn(total_timesteps=500000)
         model.save(model_path)
     else:
         model = DQN.load(model_path)
@@ -38,7 +38,7 @@ if __name__ == "__main__":
                 obs, reward, done, _ = env.step(action)
                 reward_sum += reward
                 env.render()
-                time.sleep(0.01)
+                time.sleep(0.1)
             print(reward_sum)
             reward_sum = 0.0
             obs = env.reset()
