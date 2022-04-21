@@ -86,7 +86,7 @@ class Net(nn.Module):
         batch_size=32,
     ):
         criterion = nn.MSELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
         buf = ReplayBuffer(10000, env)
         ep_rewards = []
 
