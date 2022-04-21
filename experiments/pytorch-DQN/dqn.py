@@ -62,20 +62,21 @@ class ReplayBuffer:
 class Net(nn.Module):
     def __init__(self, gamma=0.99) -> None:
         super(Net, self).__init__()
-        self.l1 = nn.Linear(10, 4)
-        self.l1.weight.data.fill_(0)
-        self.l1.bias.data.fill_(0)
-        # self.l2 = nn.Linear(48, 4)
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(10, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 4),
+        )
         self.gamma = gamma
 
     def forward(self, x):
         x = torch.from_numpy(x).float()
-        x = self.l1(x)
-        # x = self.l2(x)
-        return x
+        return self.linear_relu_stack(x)
 
     def predict(self, x):
-        action = int(torch.argmin(self(x)))
+        action = int(torch.argmax(self(x)))
         return action, None
 
     def train(
@@ -85,23 +86,28 @@ class Net(nn.Module):
         batch_size=32,
     ):
         criterion = nn.MSELoss()
-        optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
         buf = ReplayBuffer(10000, env)
+        ep_rewards = []
 
         for epoch in range(epochs):
             for i in range(100):
                 obs = env.reset()
 
                 done = False
+                reward_sum_ = 0
                 while not done:
-                    if np.random.rand() < 1 - (epoch / epochs) - 0.5:
+                    if np.random.rand() < 1 - (epoch / epochs):
                         action = np.random.randint(4)
                     else:
                         action, _ = model.predict(obs)
 
                     temp_obs = obs.copy()
                     obs, reward, done, _ = env.step(action)
-                    buf.add(temp_obs, obs, action, reward, done)
+                    reward_sum_ += reward
+                    buf.add(temp_obs.copy(), obs.copy(), action, reward, done)
+
+                ep_rewards.append(reward_sum_)
 
             # train model if there are enough samples in the replay buffer
             if buf.size >= batch_size:
@@ -118,17 +124,33 @@ class Net(nn.Module):
                         )
 
                     optimizer.zero_grad()
+
                     outputs = self(obs_t)
                     labels = outputs.clone()
                     for k in range(len(labels)):
-                        labels[k, action] = total_reward[k]
+                        labels[k, int(action[k])] = total_reward[k]
 
+                    # loss = criterion(
+                    #     torch.gather(
+                    #         outputs.clone(),
+                    #         dim=1,
+                    #         index=torch.from_numpy(
+                    #             np.array([[elem] for elem in action])
+                    #         ).long(),
+                    #     ),
+                    #     total_reward,
+                    # )
                     loss = criterion(outputs, labels)
                     loss.backward()
                     optimizer.step()
 
-            if epoch % 100 == 0:
-                print("Epoch {} finished".format(epoch))
+            if epoch % 10 == 0:
+                print(
+                    "Epoch {} finished, average reward per episode is {}".format(
+                        epoch, np.average(ep_rewards)
+                    )
+                )
+                ep_rewards = []
 
 
 class ObservationWrapper(gym.ObservationWrapper):
@@ -146,7 +168,7 @@ if __name__ == "__main__":
     env.set_params(
         reward=(0, 0, 1, -1),
         obs="simple",
-        size=4,
+        size=10,
         termination=150,
         spawn="random",
         add_len=1,
