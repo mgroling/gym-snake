@@ -1,12 +1,11 @@
-from random import sample
 import gym
 import gym_snake
 import time
 import torch
 import torch.nn as nn
 import numpy as np
-from ContinuousChromosome import ContinuousChromosome, ContinuousRepresentation
-from GA import GA
+
+from pso import PSO
 
 
 def predict(model, x):
@@ -37,7 +36,7 @@ def getNumWeights(model):
     return num_weights
 
 
-def objective(env, model, x, render=False):
+def objective_single(env, model, x, render=False):
     setWeights(model, x)
     obs = env.reset()
     total_reward = 0
@@ -51,7 +50,21 @@ def objective(env, model, x, render=False):
             env.render()
             time.sleep(0.1)
 
-    return -total_reward  # minimize
+    return total_reward
+
+
+def objective(env, model, weights):
+    rewards = np.zeros(
+        (
+            len(
+                weights,
+            )
+        )
+    )
+    for i in range(len(weights)):
+        rewards[i] = objective_single(env, model, weights[i], render=False)
+
+    return rewards
 
 
 class ObservationWrapper(gym.ObservationWrapper):
@@ -64,35 +77,67 @@ class ObservationWrapper(gym.ObservationWrapper):
 
 
 if __name__ == "__main__":
-    # models:
-    # weights: (Linear(10, 4, bias = False), ReLU), (pop: 300, gens: 200)
-    # weights_2layer: (Linear(10, 24, bias = False), ReLU, Linear(24, 4, bias = False)), (pop: 300, gens: 400)
+    # PSO Parameters
+    NUM_ITERATIONS = 1000
+    POPULATION_SIZE = 100
+    MIN_VELOCITY = -1
+    MAX_VELOCITY = 1
+    C_1 = 1
+    C_2 = 1
+    C_3 = 1
+    RANDOM_FACTOR = 1
+    W_START = 1
+    W_END = 0.3
+
+    MODEL_STRUC = 0
+
+    if MODEL_STRUC == 0:
+        model = nn.Sequential(nn.Linear(10, 4, bias=False))
+        save_path = "experiments/PSO/weights_1layer.npy"
+    elif MODEL_STRUC == 1:
+        model = nn.Sequential(
+            nn.Linear(10, 24, bias=False), nn.ReLU(), nn.Linear(24, 4, bias=False)
+        )
+        save_path = "experiments/PSO/weights_2layer.npy"
+
     train = True
     env = gym.make("gym-snake-v0")
     # env = ObservationWrapper(env)
     env.set_params(
-        reward=(0, 0, 1, -1),
+        reward=(0, 0.01, 1, -1),
         obs="simple",
-        size=15,
+        size=10,
         termination=75,
         spawn="random",
         add_len=1,
         start_length=3,
     )
-    model = nn.Sequential(nn.Linear(10, 4, bias=False), nn.ReLU())
 
     if train:
-        r = ContinuousRepresentation(-1, 1, getNumWeights(model))
-        ga = GA(r, lambda x: objective(env, model, x), debug=1)
-        ga.initPopulation(300)
-        ga.evolve(100)
-        best_weights = ga.getSolution()[1]
+        num_weights = getNumWeights(model)
+        pso = PSO(
+            [POPULATION_SIZE, num_weights],
+            lambda x: objective(env, model, x),
+            min_velocity=MIN_VELOCITY,
+            max_velocity=MAX_VELOCITY,
+            num_iterations=NUM_ITERATIONS,
+            c_1=C_1,
+            c_2=C_2,
+            c_3=C_3,
+            w_start=W_START,
+            w_end=W_END,
+            random_factor=RANDOM_FACTOR,
+        )
+        weights = pso.run(
+            np.random.random((POPULATION_SIZE, num_weights)) - 0.5, save_path=save_path
+        )
+
         for i in range(5):
-            objective(env, model, best_weights, render=True)
+            objective_single(env, model, weights, render=True)
 
         # save model
-        np.save("experiments/GA/weights.npy", best_weights)
+        np.save(save_path, weights)
     else:
-        weights = np.load("experiments/GA/weights_2layer.npy")
+        weights = np.load(save_path)
         for i in range(10):
-            objective(env, model, weights, render=True)
+            objective_single(env, model, weights, render=True)
