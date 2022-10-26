@@ -113,6 +113,8 @@ class PSO:
                 if save_path != None:
                     np.save(save_path, self.gbest)
 
+        np.save(save_path, self.gbest)
+
         plt.plot(self.plot_data_best, label="best score")
         plt.plot(self.plot_data_avg, label="avg score")
         plt.title("Score of population over iterations")
