@@ -77,10 +77,16 @@ class ObservationWrapper(gym.ObservationWrapper):
 
 
 if __name__ == "__main__":
+    # model 1:
+    # COLONY_SIZE = 300
+    # NUM_CYCLES = 1000
+    # SCOUT_LIMIT_START = 50
+    # SCOUT_LIMIT_END = 300
+    # model 2:
     COLONY_SIZE = 300
-    NUM_CYCLES = 1000
-    SCOUT_LIMIT_START = 50
-    SCOUT_LIMIT_END = 300
+    NUM_CYCLES = 3000
+    SCOUT_LIMIT_START = 500
+    SCOUT_LIMIT_END = 500
 
     MODEL_STRUC = 0
 
@@ -93,11 +99,12 @@ if __name__ == "__main__":
         )
         save_path = "experiments/ABC/weights_2layer.npy"
 
-    train = False
+    train = True
+    # save_path = "experiments/ABC/weights_1layer_model1.npy"
     env = gym.make("gym-snake-v0")
     # env = ObservationWrapper(env)
     env.set_params(
-        reward=(0, 0, 1, -1),
+        reward=(0, 0.01, 1, -1),
         obs="simple",
         size=10,
         termination=75,

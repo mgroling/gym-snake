@@ -1,3 +1,5 @@
+# Particle Swarm Optimization Algorithm
+
 import numpy as np
 import matplotlib.pyplot as plt
 

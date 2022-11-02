@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from pso import PSO
+from bat import BAT
 
 
 def predict(model, x):
@@ -50,7 +50,7 @@ def objective_single(env, model, x, render=False):
             env.render()
             time.sleep(0.1)
 
-    return total_reward
+    return -total_reward
 
 
 def objective(env, model, weights):
@@ -77,35 +77,34 @@ class ObservationWrapper(gym.ObservationWrapper):
 
 
 if __name__ == "__main__":
-    # PSO Parameters
-    NUM_ITERATIONS = 1000
-    POPULATION_SIZE = 100
-    MIN_VELOCITY = -1
-    MAX_VELOCITY = 1
-    C_1 = 1
-    C_2 = 1
-    C_3 = 1
-    RANDOM_FACTOR = 1
-    W_START = 1
-    W_END = 0.3
+    NUM_ITERATIONS = 500
+    NUM_BATS = 100
+    MIN_FREQUENCY = 0
+    MAX_FREQUENCY = 0.5
+    MIN_LOUDNESS = 0
+    MAX_LOUDNESS = 1
+    MIN_PULSE_RATE = 0
+    MAX_PULSE_RATE = 1
+    ALPHA = 0.4
+    GAMMA = 0.4
 
     MODEL_STRUC = 0
 
     if MODEL_STRUC == 0:
         model = nn.Sequential(nn.Linear(10, 4, bias=False))
-        save_path = "experiments/PSO/weights_1layer.npy"
+        save_path = "experiments/BAT/weights_1layer.npy"
     elif MODEL_STRUC == 1:
         model = nn.Sequential(
             nn.Linear(10, 24, bias=False), nn.ReLU(), nn.Linear(24, 4, bias=False)
         )
-        save_path = "experiments/PSO/weights_2layer.npy"
+        save_path = "experiments/BAT/weights_2layer.npy"
 
-    save_path = "experiments/PSO/weights_1layer_model1.npy"
-    train = False
+    train = True
+    # save_path = "experiments/ABC/weights_1layer_model1.npy"
     env = gym.make("gym-snake-v0")
     # env = ObservationWrapper(env)
     env.set_params(
-        reward=(0, 0.01, 1, -1),
+        reward=(0, 0, 1, -1),
         obs="simple",
         size=10,
         termination=75,
@@ -116,22 +115,21 @@ if __name__ == "__main__":
 
     if train:
         num_weights = getNumWeights(model)
-        pso = PSO(
-            [POPULATION_SIZE, num_weights],
-            lambda x: objective(env, model, x),
-            min_velocity=MIN_VELOCITY,
-            max_velocity=MAX_VELOCITY,
-            num_iterations=NUM_ITERATIONS,
-            c_1=C_1,
-            c_2=C_2,
-            c_3=C_3,
-            w_start=W_START,
-            w_end=W_END,
-            random_factor=RANDOM_FACTOR,
+        bat = BAT(
+            [num_weights],
+            NUM_ITERATIONS,
+            NUM_BATS,
+            objective=lambda x: objective(env, model, x),
+            min_frequency=MIN_FREQUENCY,
+            max_frequency=MAX_FREQUENCY,
+            min_loudness=MIN_LOUDNESS,
+            max_loudness=MAX_LOUDNESS,
+            min_pulse_rate=MIN_PULSE_RATE,
+            max_pulse_rate=MAX_PULSE_RATE,
+            alpha=ALPHA,
+            gamma=GAMMA,
         )
-        weights = pso.run(
-            np.random.random((POPULATION_SIZE, num_weights)) - 0.5, save_path=save_path
-        )
+        weights = bat.run(save_path=save_path)
 
         for i in range(5):
             objective_single(env, model, weights, render=True)
